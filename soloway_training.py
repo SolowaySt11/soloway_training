@@ -3,7 +3,6 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 from datetime import datetime, timedelta
 import random
 import sqlite3
-import os
 
 TOKEN = "8988046732:AAHeX1dCsfSw4hYwKT9NWk1roEU1lktNII8"
 
@@ -180,11 +179,9 @@ async def finish_workout(update: Update, context: ContextTypes.DEFAULT_TYPE, cha
     user_id = update.effective_user.id
     today = datetime.now().strftime("%Y-%m-%d")
 
-    # Сохраняем каждое упражнение в базу
     for r in results:
         save_workout(user_id, today, r['name'], r['weight'], r['reps'], r['sets'], r['rest'])
 
-    # Текст статистики
     text = "🏋️‍♀️ *Тренировка завершена!*\n\n📊 *Статистика:*\n"
     total_rest = 0
     for r in results:
@@ -276,7 +273,6 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📊 За последние 30 дней нет данных. Проведите тренировку и повторите команду.")
         return
 
-    # Группируем по упражнениям
     exercises = {}
     for row in rows:
         date, ex, weight, reps, sets, rest = row
@@ -288,11 +284,9 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text += f"🏋️‍♀️ *Всего тренировок:* {len(set(r[0] for r in rows))}\n\n"
 
     for ex, data in exercises.items():
-        # Средние значения
         avg_weight = sum(d["weight"] for d in data) / len(data)
         avg_reps = sum(d["reps"] for d in data) / len(data)
         avg_sets = sum(d["sets"] for d in data) / len(data)
-        # Динамика: первый и последний вес
         first_weight = data[0]["weight"]
         last_weight = data[-1]["weight"]
         diff = last_weight - first_weight
@@ -322,23 +316,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-async def test_workout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    test_workout_data = WORKOUTS["monday"]
-    context.user_data["workout"] = {
-        "name": test_workout_data["name"],
-        "exercises": test_workout_data["exercises"].copy(),
-        "results": [],
-        "current_exercise_index": 0
-    }
-    await ask_exercise(update, context, update.message.chat_id)
-
 def main():
     init_db()
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("workout", workout))
     app.add_handler(CommandHandler("report", report))
-    app.add_handler(CommandHandler("test_workout", test_workout))
     app.add_handler(CallbackQueryHandler(button_callback))
     print("Джарвис Трекер с SQLite запущен...")
     app.run_polling()
