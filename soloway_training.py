@@ -64,10 +64,9 @@ async def workout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def ask_exercise(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id=None):
     workout = context.user_data.get("workout")
     if not workout or workout["current_exercise_index"] >= len(workout["exercises"]):
-        await finish_workout(update, context)
+        await finish_workout(update, context, chat_id)
         return
 
-    # Если chat_id не передан, определяем его из update
     if chat_id is None:
         if update.message:
             chat_id = update.message.chat_id
@@ -100,21 +99,36 @@ async def ask_exercise(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_
         parse_mode="Markdown"
     )
 
-async def finish_workout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    results = context.user_data.get("workout", {}).get("results", [])
-    if not results:
-        await update.message.reply_text("❌ Нет данных о тренировке.")
+async def finish_workout(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id=None):
+    workout = context.user_data.get("workout")
+    if not workout:
         return
+
+    results = workout.get("results", [])
+    if not results:
+        context.user_data.pop("workout", None)
+        return
+
+    if chat_id is None:
+        if update.message:
+            chat_id = update.message.chat_id
+        elif update.callback_query:
+            chat_id = update.callback_query.message.chat_id
+        else:
+            return
+
     text = "🏋️‍♀️ *Тренировка завершена!*\n\n📊 *Статистика:*\n"
     total_rest = 0
     for r in results:
         text += f"• {r['name']} — {r['weight']} кг х {r['reps']} х {r['sets']} (отдых {r['rest']} мин)\n"
         total_rest += r['rest']
+
     avg_rest = total_rest / len(results) if results else 0
     text += f"\n⏱️ *Средний отдых:* ≈ {avg_rest:.1f} мин"
-    text += f"\n✅ Выполнено: {len(results)}/{len(context.user_data['workout']['exercises'])} упражнений"
+    text += f"\n✅ Выполнено: {len(results)}/{len(workout['exercises'])} упражнений"
     text += "\n💪 Молодец!"
-    await update.message.reply_text(text, parse_mode="Markdown")
+
+    await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
     context.user_data.pop("workout", None)
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -181,10 +195,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("✅ Записано!")
         
         if workout["current_exercise_index"] >= len(workout["exercises"]):
-            await finish_workout(update, context)
+            await finish_workout(update, context, chat_id)
         else:
             await ask_exercise(update, context, chat_id)
         return
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🏋️‍♀️ *Трекер тренировок*\n\n"
