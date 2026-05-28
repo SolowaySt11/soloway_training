@@ -148,11 +148,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
+#deletelater 
+async def test_workout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Принудительно подставляем понедельник
+    test_workout_data = WORKOUTS["monday"]
+    context.user_data["workout"] = {
+        "name": test_workout_data["name"],
+        "exercises": test_workout_data["exercises"].copy(),
+        "results": [],
+        "current_exercise_index": 0
+    }
+    await ask_exercise(update, context)
+
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("workout", workout))
     app.add_handler(CallbackQueryHandler(button_callback))
+    app.add_handler(CommandHandler("test_workout", test_workout))
     print("Бот трекера тренировок запущен...")
     app.run_polling()
 
