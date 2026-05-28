@@ -1,6 +1,7 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from datetime import datetime
+import random
 
 TOKEN = "8988046732:AAHeX1dCsfSw4hYwKT9NWk1roEU1lktNII8"
 
@@ -44,6 +45,17 @@ WORKOUTS = {
     }
 }
 
+encouragements = [
+    "🔥 Сэр, вы в отличной форме!",
+    "💪 Ещё один шаг к идеалу. Записываю.",
+    "🎯 Сосредоточьтесь. Техника решает всё.",
+    "⚡ Легко? Тогда в следующий раз возьмите больше вес.",
+    "🤖 Джарвис на связи. Продолжаем.",
+    "🏆 Вы сильнее, чем думаете, сэр.",
+    "📈 Ещё подход — и прогресс будет виден.",
+    "🎧 Работаем. Без музыки, но с характером."
+]
+
 def get_today_workout():
     weekday = datetime.now().strftime("%A").lower()
     return WORKOUTS.get(weekday, {"name": "Нет тренировки", "exercises": []})
@@ -59,6 +71,7 @@ async def workout(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "results": [],
         "current_exercise_index": 0
     }
+    await update.message.reply_text("🏋️‍♂️ Сэр, вы готовы к тренировке? Я записал план. Поехали.")
     await ask_exercise(update, context, update.message.chat_id)
 
 async def ask_exercise(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id=None):
@@ -89,12 +102,13 @@ async def ask_exercise(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_
         await ask_exercise(update, context, chat_id)
         return
 
+    phrase = random.choice(encouragements)
     keyboard = [[InlineKeyboardButton(f"{w} кг", callback_data=f"weight_{w}") for w in exercise["weights"]]]
     keyboard.append([InlineKeyboardButton("Пропустить упражнение", callback_data="skip_exercise")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await context.bot.send_message(
         chat_id=chat_id,
-        text=f"🏋️‍♀️ *{exercise['name']}*\nВыбери вес:",
+        text=f"🏋️‍♀️ *{exercise['name']}*\n{phrase}\nВыбери вес:",
         reply_markup=reply_markup,
         parse_mode="Markdown"
     )
@@ -126,7 +140,7 @@ async def finish_workout(update: Update, context: ContextTypes.DEFAULT_TYPE, cha
     avg_rest = total_rest / len(results) if results else 0
     text += f"\n⏱️ *Средний отдых:* ≈ {avg_rest:.1f} мин"
     text += f"\n✅ Выполнено: {len(results)}/{len(workout['exercises'])} упражнений"
-    text += "\n💪 Молодец!"
+    text += "\n\n🏆 Отличная работа, сэр. Ваше тело становится крепче. 💪"
 
     await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
     context.user_data.pop("workout", None)
@@ -144,7 +158,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "skip_exercise":
         workout["current_exercise_index"] += 1
-        await query.edit_message_text("⏩ Упражнение пропущено.")
+        await query.edit_message_text("⏩ Упражнение пропущено. Но я всё равно в вас верю, сэр.")
         await ask_exercise(update, context, chat_id)
         return
 
@@ -202,10 +216,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🏋️‍♀️ *Трекер тренировок*\n\n"
+        "🏋️‍♀️ *Джарвис Трекер*\n\n"
         "Команды:\n"
         "/workout — начать тренировку на сегодня\n"
-        "/start — это сообщение",
+        "/start — это сообщение\n\n"
+        "🤖 Джарвис поможет вам не сойти с пути силы.",
         parse_mode="Markdown"
     )
 
@@ -225,7 +240,7 @@ def main():
     app.add_handler(CommandHandler("workout", workout))
     app.add_handler(CommandHandler("test_workout", test_workout))
     app.add_handler(CallbackQueryHandler(button_callback))
-    print("Бот трекера тренировок запущен...")
+    print("Джарвис Трекер запущен...")
     app.run_polling()
 
 if __name__ == "__main__":
