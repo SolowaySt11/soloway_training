@@ -43,11 +43,11 @@ WORKOUTS = {
         ]
     }
 }
-#проверканаденьнеделиирезультат
+
 def get_today_workout():
     weekday = datetime.now().strftime("%A").lower()
     return WORKOUTS.get(weekday, {"name": "Нет тренировки", "exercises": []})
-#результатимеющиегосядня
+
 async def workout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     workout_data = get_today_workout()
     if not workout_data["exercises"]:
@@ -59,16 +59,25 @@ async def workout(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "results": [],
         "current_exercise_index": 0
     }
-    await ask_exercise(update, context)
-#выводимнулевуюпеременуюдлясв
-async def ask_exercise(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await ask_exercise(update, context, update.message.chat_id)
+
+async def ask_exercise(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id=None):
     workout = context.user_data.get("workout")
     if not workout or workout["current_exercise_index"] >= len(workout["exercises"]):
         await finish_workout(update, context)
         return
+
+    # Если chat_id не передан, определяем его из update
+    if chat_id is None:
+        if update.message:
+            chat_id = update.message.chat_id
+        elif update.callback_query:
+            chat_id = update.callback_query.message.chat_id
+        else:
+            return
+
     exercise = workout["exercises"][workout["current_exercise_index"]]
     if not exercise["weights"]:
-        # Нет весов — сразу записываем упражнение с весом 0
         workout["results"].append({
             "name": exercise["name"],
             "weight": 0,
@@ -77,20 +86,20 @@ async def ask_exercise(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "rest": 0
         })
         workout["current_exercise_index"] += 1
-        await update.message.reply_text(f"✅ {exercise['name']} (без веса) — пропущено")
-        await ask_exercise(update, context)
+        await context.bot.send_message(chat_id=chat_id, text=f"✅ {exercise['name']} (без веса) — пропущено")
+        await ask_exercise(update, context, chat_id)
         return
-    #пропускупражнения
+
     keyboard = [[InlineKeyboardButton(f"{w} кг", callback_data=f"weight_{w}") for w in exercise["weights"]]]
     keyboard.append([InlineKeyboardButton("Пропустить упражнение", callback_data="skip_exercise")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    #самыйважныйцикл
-    await update.message.reply_text(
-        f"🏋️‍♀️ *{exercise['name']}*\nВыбери вес:",
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=f"🏋️‍♀️ *{exercise['name']}*\nВыбери вес:",
         reply_markup=reply_markup,
         parse_mode="Markdown"
     )
-#подведениестатистики
+
 async def finish_workout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     results = context.user_data.get("workout", {}).get("results", [])
     if not results:
@@ -102,13 +111,12 @@ async def finish_workout(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"• {r['name']} — {r['weight']} кг х {r['reps']} х {r['sets']} (отдых {r['rest']} мин)\n"
         total_rest += r['rest']
     avg_rest = total_rest / len(results) if results else 0
-    #среднеечисло
     text += f"\n⏱️ *Средний отдых:* ≈ {avg_rest:.1f} мин"
     text += f"\n✅ Выполнено: {len(results)}/{len(context.user_data['workout']['exercises'])} упражнений"
     text += "\n💪 Молодец!"
     await update.message.reply_text(text, parse_mode="Markdown")
     context.user_data.pop("workout", None)
-#циклыдлятренировокосновабазаподходыиповторения
+
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -117,11 +125,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not workout:
         await query.edit_message_text("Начни тренировку с /workout")
         return
+
     if data == "skip_exercise":
         workout["current_exercise_index"] += 1
         await query.edit_message_text("⏩ Упражнение пропущено.")
-        await ask_exercise(update, context)
+        await ask_exercise(update, context, query.message.chat_id)
         return
+
     if data.startswith("weight_"):
         weight = float(data.split("_")[1])
         workout["temp_weight"] = weight
@@ -132,6 +142,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
         return
+
     if data.startswith("reps_"):
         reps = int(data.split("_")[1])
         workout["temp_reps"] = reps
@@ -142,6 +153,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
         return
+
     if data.startswith("sets_"):
         sets = int(data.split("_")[1])
         workout["temp_sets"] = sets
@@ -152,6 +164,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
         return
+
     if data.startswith("rest_"):
         rest = float(data.split("_")[1])
         exercise = workout["exercises"][workout["current_exercise_index"]]
@@ -164,9 +177,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         })
         workout["current_exercise_index"] += 1
         await query.edit_message_text("✅ Записано!")
-        await ask_exercise(update, context)
+        await ask_exercise(update, context, query.message.chat_id)
         return
-#основныекоманды
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🏋️‍♀️ *Трекер тренировок*\n\n"
@@ -175,7 +188,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/start — это сообщение",
         parse_mode="Markdown"
     )
-#функцияворкаут
+
 async def test_workout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     test_workout_data = WORKOUTS["monday"]
     context.user_data["workout"] = {
@@ -184,7 +197,7 @@ async def test_workout(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "results": [],
         "current_exercise_index": 0
     }
-    await ask_exercise(update, context)
+    await ask_exercise(update, context, update.message.chat_id)
 
 def main():
     app = Application.builder().token(TOKEN).build()
