@@ -1,7 +1,9 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-from datetime import datetime
+from datetime import datetime, timedelta
 import random
+import sqlite3
+import os
 
 TOKEN = "8988046732:AAHeX1dCsfSw4hYwKT9NWk1roEU1lktNII8"
 
@@ -56,6 +58,50 @@ encouragements = [
     "🎧 Работаем. Без музыки, но с характером."
 ]
 
+# --- База данных ---
+def init_db():
+    conn = sqlite3.connect("training.db")
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS workouts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            date TEXT,
+            exercise TEXT,
+            weight REAL,
+            reps INTEGER,
+            sets INTEGER,
+            rest REAL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def save_workout(user_id, date, exercise, weight, reps, sets, rest):
+    conn = sqlite3.connect("training.db")
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO workouts (user_id, date, exercise, weight, reps, sets, rest)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (user_id, date, exercise, weight, reps, sets, rest))
+    conn.commit()
+    conn.close()
+
+def get_report(user_id, days=30):
+    conn = sqlite3.connect("training.db")
+    c = conn.cursor()
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    c.execute("""
+        SELECT date, exercise, weight, reps, sets, rest
+        FROM workouts
+        WHERE user_id = ? AND date >= ?
+        ORDER BY date ASC
+    """, (user_id, cutoff))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+# --- Основные функции бота ---
 def get_today_workout():
     weekday = datetime.now().strftime("%A").lower()
     return WORKOUTS.get(weekday, {"name": "Нет тренировки", "exercises": []})
@@ -131,6 +177,14 @@ async def finish_workout(update: Update, context: ContextTypes.DEFAULT_TYPE, cha
         else:
             return
 
+    user_id = update.effective_user.id
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # Сохраняем каждое упражнение в базу
+    for r in results:
+        save_workout(user_id, today, r['name'], r['weight'], r['reps'], r['sets'], r['rest'])
+
+    # Текст статистики
     text = "🏋️‍♀️ *Тренировка завершена!*\n\n📊 *Статистика:*\n"
     total_rest = 0
     for r in results:
@@ -214,11 +268,55 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await ask_exercise(update, context, chat_id)
         return
 
+async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    rows = get_report(user_id, days=30)
+
+    if not rows:
+        await update.message.reply_text("📊 За последние 30 дней нет данных. Проведите тренировку и повторите команду.")
+        return
+
+    # Группируем по упражнениям
+    exercises = {}
+    for row in rows:
+        date, ex, weight, reps, sets, rest = row
+        if ex not in exercises:
+            exercises[ex] = []
+        exercises[ex].append({"weight": weight, "reps": reps, "sets": sets, "date": date})
+
+    text = "📊 *Отчёт за 30 дней*\n\n"
+    text += f"🏋️‍♀️ *Всего тренировок:* {len(set(r[0] for r in rows))}\n\n"
+
+    for ex, data in exercises.items():
+        # Средние значения
+        avg_weight = sum(d["weight"] for d in data) / len(data)
+        avg_reps = sum(d["reps"] for d in data) / len(data)
+        avg_sets = sum(d["sets"] for d in data) / len(data)
+        # Динамика: первый и последний вес
+        first_weight = data[0]["weight"]
+        last_weight = data[-1]["weight"]
+        diff = last_weight - first_weight
+        if diff > 0:
+            trend = f"📈 +{diff} кг"
+        elif diff < 0:
+            trend = f"📉 {diff} кг"
+        else:
+            trend = "➡️ без изменений"
+
+        text += f"*{ex}*\n"
+        text += f"   🔹 Средний вес: {avg_weight:.1f} кг\n"
+        text += f"   🔸 Средние повторения: {avg_reps:.1f}\n"
+        text += f"   🔹 Средние подходы: {avg_sets:.1f}\n"
+        text += f"   📊 Динамика: {trend}\n\n"
+
+    await update.message.reply_text(text, parse_mode="Markdown")
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🏋️‍♀️ *Джарвис Трекер*\n\n"
         "Команды:\n"
         "/workout — начать тренировку на сегодня\n"
+        "/report — отчёт за 30 дней\n"
         "/start — это сообщение\n\n"
         "🤖 Джарвис поможет вам не сойти с пути силы.",
         parse_mode="Markdown"
@@ -235,12 +333,14 @@ async def test_workout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await ask_exercise(update, context, update.message.chat_id)
 
 def main():
+    init_db()
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("workout", workout))
+    app.add_handler(CommandHandler("report", report))
     app.add_handler(CommandHandler("test_workout", test_workout))
     app.add_handler(CallbackQueryHandler(button_callback))
-    print("Джарвис Трекер запущен...")
+    print("Джарвис Трекер с SQLite запущен...")
     app.run_polling()
 
 if __name__ == "__main__":
