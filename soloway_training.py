@@ -121,7 +121,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
+    chat_id = query.message.chat_id
     workout = context.user_data.get("workout")
+    
     if not workout:
         await query.edit_message_text("Начни тренировку с /workout")
         return
@@ -129,7 +131,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "skip_exercise":
         workout["current_exercise_index"] += 1
         await query.edit_message_text("⏩ Упражнение пропущено.")
-        await ask_exercise(update, context, query.message.chat_id)
+        await ask_exercise(update, context, chat_id)
         return
 
     if data.startswith("weight_"):
@@ -177,9 +179,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         })
         workout["current_exercise_index"] += 1
         await query.edit_message_text("✅ Записано!")
-        await ask_exercise(update, context, query.message.chat_id)
+        
+        if workout["current_exercise_index"] >= len(workout["exercises"]):
+            await finish_workout(update, context)
+        else:
+            await ask_exercise(update, context, chat_id)
         return
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🏋️‍♀️ *Трекер тренировок*\n\n"
