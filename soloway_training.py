@@ -3,11 +3,32 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 from datetime import datetime, timedelta
 import random
 import sqlite3
+import locale
+
+# Пробуем установить русскую локаль для дней недели
+try:
+    locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+except:
+    try:
+        locale.setlocale(locale.LC_TIME, 'ru_RU')
+    except:
+        pass  # Если не получилось, используем словарь перевода
 
 TOKEN = "8988046732:AAHeX1dCsfSw4hYwKT9NWk1roEU1lktNII8"
 
+# Словарь перевода дней недели (на случай, если локаль не установилась)
+TRANSLATE_DAYS = {
+    "Monday": "понедельник",
+    "Tuesday": "вторник",
+    "Wednesday": "среда",
+    "Thursday": "четверг",
+    "Friday": "пятница",
+    "Saturday": "суббота",
+    "Sunday": "воскресенье"
+}
+
 WORKOUTS = {
-    "monday": {
+    "понедельник": {
         "name": "Ягодицы + Ноги",
         "exercises": [
             {"name": "Приседания со штангой", "weights": [15, 20, 25]},
@@ -18,8 +39,8 @@ WORKOUTS = {
             {"name": "Гиперэкстензия", "weights": [4, 8, 10]}
         ]
     },
-    "tuesday": {"name": "Отдых", "exercises": []},
-    "wednesday": {
+    "вторник": {"name": "Отдых", "exercises": []},
+    "среда": {
         "name": "Руки + Плечи",
         "exercises": [
             {"name": "Подъём штанги на бицепс", "weights": [10, 12.5, 15]},
@@ -29,10 +50,20 @@ WORKOUTS = {
             {"name": "Молотки", "weights": [8, 16]}
         ]
     },
-    "thursday": {"name": "Отдых", "exercises": []},
-    "friday": {"name": "Ягодицы + Ноги", "exercises": []},
-    "saturday": {"name": "Отдых", "exercises": []},
-    "sunday": {
+    "четверг": {"name": "Отдых", "exercises": []},
+    "пятница": {
+        "name": "Ягодицы + Ноги",
+        "exercises": [
+            {"name": "Приседания со штангой", "weights": [15, 20, 25]},
+            {"name": "Румынская тяга", "weights": [15, 20, 25]},
+            {"name": "Ягодичный мостик", "weights": [15, 20, 25]},
+            {"name": "Выпады (румынские)", "weights": [10, 16]},
+            {"name": "Подъёмы икр", "weights": [15, 20, 25]},
+            {"name": "Гиперэкстензия", "weights": [4, 8, 10]}
+        ]
+    },
+    "суббота": {"name": "Отдых", "exercises": []},
+    "воскресенье": {
         "name": "Грудь + Спина",
         "exercises": [
             {"name": "Отжимания", "weights": [2, 4]},
@@ -102,8 +133,11 @@ def get_report(user_id, days=30):
 
 # --- Основные функции бота ---
 def get_today_workout():
-    weekday = datetime.now().strftime("%A").lower()
-    return WORKOUTS.get(weekday, {"name": "Нет тренировки", "exercises": []})
+    # Получаем день недели
+    eng_day = datetime.now().strftime("%A")
+    # Переводим на русский
+    ru_day = TRANSLATE_DAYS.get(eng_day, eng_day.lower())
+    return WORKOUTS.get(ru_day, {"name": "Нет тренировки", "exercises": []})
 
 async def workout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     workout_data = get_today_workout()
